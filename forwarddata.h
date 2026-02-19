@@ -31,7 +31,7 @@ using json = nlohmann::json;
 void LoadSensorPostURLs();
 
 // @brief forward telemetry to cloud service
-void QueueSensorDataPost( const HHDeviceAddress_t &src_id, const std::string &sdata_str );
+void QueueSensorDataPost( const LHDeviceAddress_t &src_id, const std::string &sdata_str );
 
 void StartSensorDataPostWorker();
 

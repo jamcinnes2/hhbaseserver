@@ -110,7 +110,7 @@ std::string RenderStatusPage(){
     char host_name[256];
     gethostname(host_name, 255);
     page_text << "<h3>SENSOR NETWORK STATUS v" << BASE_FIRMWARE_VERSION_STR; // << "</h3>";
-    page_text <<  " -- protocol v" << fmt::format("{:02X}", GetHHVersion());
+    page_text <<  " -- protocol v" << fmt::format("{:02X}", GetLHVersion());
     page_text <<  " -- hostname " << host_name << "</h3>";
     WSTemplates::GetHTML_NodeList(page_text);
     page_text << R"(

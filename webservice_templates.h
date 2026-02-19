@@ -60,7 +60,7 @@ namespace WSTemplates{
             </tr>
         )";
 
-        auto nodes = GetHHNodesMetadata();
+        auto nodes = GetLHNodesMetadata();
         for( const auto node : nodes ){
             std::string last_txtime_str = node.last_tx_time == 0 ? "0" : CTimeToStr(node.last_tx_time);
             page_text << "<tr>\n";

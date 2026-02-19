@@ -72,50 +72,50 @@
 #include <array>
 #ifdef ARDUINO
 #include "seriallog.h"
-typedef String HHStrClass;  // avoid std::string on embedded platforms
+typedef String LHStrClass;  // avoid std::string on embedded platforms
 #else
 #include <deque>
 #include <vector>
 #include <string>
-typedef std::string HHStrClass;
+typedef std::string LHStrClass;
 #include "teestream.h"
 #endif
 
 // Arduino project wide defines are difficult so set the defs here
-#define HOLYHOP_BASE      // code for a BASE
-//#define HOLYHOP_SENSOR    // code for a SENSOR
+#define LOWHOP_BASE      // code for a BASE
+//#define LOWHOP_SENSOR    // code for a SENSOR
 
-#if !defined(HOLYHOP_BASE) && !defined(HOLYHOP_SENSOR)
-#error "Compilation failed: either HOLYHOP_BASE or HOLYHOP_SENSOR must be defined"
+#if !defined(LOWHOP_BASE) && !defined(LOWHOP_SENSOR)
+#error "Compilation failed: either LOWHOP_BASE or LOWHOP_SENSOR must be defined"
 #endif
-#if defined(HOLYHOP_BASE) && defined(HOLYHOP_SENSOR)
-#error "Both HOLYHOP_BASE and HOLYHOP_SENSOR are defined; please choose only one."
+#if defined(LOWHOP_BASE) && defined(LOWHOP_SENSOR)
+#error "Both LOWHOP_BASE and LOWHOP_SENSOR are defined; please choose only one."
 #endif
 
 // time constants are milliseconds unless labeledd _SEC
-#define HOLYHOP_VERSION 0x65        // single byte protocol version
-#define HOLYHOP_NAME_SIZE 13        // includes term. null
-#define HOLYHOP_DID_SIZE 4          // device id/address
-#define HOLYHOP_DID_HEXSTR_SIZE (HOLYHOP_DID_SIZE * 2 + 1)
-#define HOLYHOP_MAX_NODES 1000
-#define HOLYHOP_MAX_CMDSQ 6
-#define HOLYHOP_MAX_HOP_COUNT 10     // max # of hops allowed for a packet.. affects timings
-#define HOLYHOP_FORGET_NODE_SEC (60*60*6) // if we dont hear any traffic from a node after ahile forget about it
-#define HOLYHOP_PING_NODES_SEC (HOLYHOP_FORGET_NODE_SEC - 60*60) // how often base 'pings' nodes so they don't forget it
-#define HOLYHOP_RX_WINDOW_SEC 30     // how long nodes are awake for TX-RX commands and telemetry
-#define HOLYHOP_TX_EXTRA_WAIT_SEC 10 // Base wait to talk to waking nodes because they will be doing telemetry TX
+#define LOWHOP_VERSION 0x65        // single byte protocol version
+#define LOWHOP_NAME_SIZE 13        // includes term. null
+#define LOWHOP_DID_SIZE 4          // device id/address
+#define LOWHOP_DID_HEXSTR_SIZE (LOWHOP_DID_SIZE * 2 + 1)
+#define LOWHOP_MAX_NODES 1000
+#define LOWHOP_MAX_CMDSQ 6
+#define LOWHOP_MAX_HOP_COUNT 10     // max # of hops allowed for a packet.. affects timings
+#define LOWHOP_FORGET_NODE_SEC (60*60*6) // if we dont hear any traffic from a node after ahile forget about it
+#define LOWHOP_PING_NODES_SEC (LOWHOP_FORGET_NODE_SEC - 60*60) // how often base 'pings' nodes so they don't forget it
+#define LOWHOP_RX_WINDOW_SEC 30     // how long nodes are awake for TX-RX commands and telemetry
+#define LOWHOP_TX_EXTRA_WAIT_SEC 10 // Base wait to talk to waking nodes because they will be doing telemetry TX
                                      // todo: calculate this by tallying node tlm_offset times
-#define HOLYHOP_PRE_RX_WINDOW_SEC 10 // if this close to start of RX window don't send new commands
-//#define HOLYHOP_TX_TIMEOUT 10000
-#define HOLYHOP_REPLY_TIMEOUT 7000  // milliseconds to listen for command reply. give some time but dont eat the whole RX window
+#define LOWHOP_PRE_RX_WINDOW_SEC 10 // if this close to start of RX window don't send new commands
+//#define LOWHOP_TX_TIMEOUT 10000
+#define LOWHOP_REPLY_TIMEOUT 7000  // milliseconds to listen for command reply. give some time but dont eat the whole RX window
                                     // todo: calculate this by using node's tlm_offset time
-#define HOLYHOP_TLM_PKT_TIME 576    // time on air in ms for tlm packet (todo: runtime calc this based on LoRa config)
-//#define HOLYHOP_TX_RELAY_TIME 10    // milliseconds it takes a sensor node to turn around and relay a pkt
+#define LOWHOP_TLM_PKT_TIME 576    // time on air in ms for tlm packet (todo: runtime calc this based on LoRa config)
+//#define LOWHOP_TX_RELAY_TIME 10    // milliseconds it takes a sensor node to turn around and relay a pkt
                                     // ..(not counting LoRa turnaround below)
-#define HOLYHOP_DEFAULT_TLM_INTERVAL_SEC (5*60) // a default interval until we hear from Base
-#define HOLYHOP_CMD_EXPIRE_SEC (12*60*60)   // 12 hours
-#define HOLYHOP_CMD_MAX_RETRY 2             // TX retries
-#define HOLYHOP_CMD_MAX_QCMDS 15            // max size of server cmd_queue and hist_queue
+#define LOWHOP_DEFAULT_TLM_INTERVAL_SEC (5*60) // a default interval until we hear from Base
+#define LOWHOP_CMD_EXPIRE_SEC (12*60*60)   // 12 hours
+#define LOWHOP_CMD_MAX_RETRY 2             // TX retries
+#define LOWHOP_CMD_MAX_QCMDS 15            // max size of server cmd_queue and hist_queue
 #define LORA_MAX_PKT_SIZE 256
 #define LORA_TURNAROUND_DELAYMS 50  // Time to give a node to process a packet and switch radio modes.
                                     // Some radios need alot of time to go from TX to RX or RX to TX..
@@ -124,11 +124,11 @@ typedef std::string HHStrClass;
                                     // Going from RX->TX we pause (to give other nodes time to go from TX->RX)
 #define LORA_CAD_DELAYMS 130        // Time in ms for 1 Channel Activity Detection attempt to complete
 
-static_assert(HOLYHOP_PING_NODES_SEC > 60);
-static_assert(HOLYHOP_TX_EXTRA_WAIT_SEC < HOLYHOP_RX_WINDOW_SEC);
+static_assert(LOWHOP_PING_NODES_SEC > 60);
+static_assert(LOWHOP_TX_EXTRA_WAIT_SEC < LOWHOP_RX_WINDOW_SEC);
 // todo: assert that maxnodes * rxwindow * maxhops all checks out
 
-enum KnownOUI_t : uint8_t {     // see IsHHPktValid..
+enum KnownOUI_t : uint8_t {     // see IsLHPktValid..
     OUI_ZERO = 0,               // reserved
     BROADCAST = 1,              // special: dest is any/all local nodes (direct hop)
     BASE = 2,                   // special: dest is any/all Bases, src is Base with unique id {BASE,X,X,X}
@@ -155,7 +155,7 @@ enum PacketType_t : uint8_t {
     CMD_GET_PREFERRED_UPLINK,
     CMD_SET_PREFERRED_UPLINK,
 
-    // reply to a command from sensors to base see IsHHReplyPkt()
+    // reply to a command from sensors to base see IsLHReplyPkt()
     REPLY_VERSION = 60,
     REPLY_SUCCESS,
     REPLY_FAILURE,
@@ -170,7 +170,8 @@ enum PacketType_t : uint8_t {
     //HOP_INFO = 85,
     RADAR_TELEMETRY = 100,
     RADAR_ALLM_TELEMETRY,
-    RADAR_GNSS_TELEMETRY
+    RADAR_GNSS_TELEMETRY,
+    RBEXT_TELEMETRY,
 };
 
 enum PacketReplyStatus_t : uint8_t{
@@ -183,9 +184,9 @@ enum PacketReplyStatus_t : uint8_t{
 ///////////////////////////////////
 // Packed structs for transmission
 #pragma pack(push, 1)
-// PacketDeviceID_t is for packing bytes. Better to use HHDeviceAddress_t if you need to work with device ids
+// PacketDeviceID_t is for packing bytes. Better to use LHDeviceAddress_t if you need to work with device ids
 struct PacketDeviceID_t {
-    uint8_t TheID[HOLYHOP_DID_SIZE];
+    uint8_t TheID[LOWHOP_DID_SIZE];
 
     bool IsMatch(PacketDeviceID_t other_id) const{
         return memcmp(TheID, other_id.TheID, sizeof(TheID)) == 0;
@@ -271,7 +272,7 @@ struct PacketHeader_t {
     PacketDeviceID_t Src;       // origin of packet
     PacketType_t PktType;
     uint8_t HopCount;           // how many hops packet has taken
-    const uint8_t HHVer = HOLYHOP_VERSION;
+    const uint8_t LHVer = LOWHOP_VERSION;
 };
 
 // Command packets and Reply packets have a ref_id for matching with each other.
@@ -321,11 +322,11 @@ struct PayloadEmpty_t{
 };
 
 struct PayloadGetVersion_t {
-    const uint8_t hh_version = HOLYHOP_VERSION;  // send our hh version with the command
+    const uint8_t lh_version = LOWHOP_VERSION;  // send our lh version with the command
 };
 
 struct PayloadSetName_t {
-    PacketString_t<HOLYHOP_NAME_SIZE> name;
+    PacketString_t<LOWHOP_NAME_SIZE> name;
 };
 
 struct PayloadSetPreferredUplink_t{
@@ -376,13 +377,13 @@ struct PayloadDFUUpload_t {
 };
 
 struct PayloadReplyVersion_t {
-    const uint8_t hh_version = HOLYHOP_VERSION;
+    const uint8_t lh_version = LOWHOP_VERSION;
     uint16_t fw_version;    // sensor firmware ver
     uint32_t bl_version;    // bootloader ver
 };
 
 struct PayloadReplyName_t {
-    PacketString_t<HOLYHOP_NAME_SIZE> name;
+    PacketString_t<LOWHOP_NAME_SIZE> name;
 };
 
 struct PayloadReplyPreferredUplink_t{
@@ -497,6 +498,19 @@ struct PayloadRadarGNSSTelemetry_t { // standard radar measurement w/ GNSS
     uint8_t fix_type;           // GNSS fix type
 };
 
+struct PayloadRBExtTelemetry_t { // standard radar measurement w/ GNSS
+    uint16_t wake_count;
+    int16_t batt_voltage;
+    int16_t last_rssi;
+    int8_t last_snr;    
+    int16_t temp_sensor_c;  // actual temperature sensor (NOT PCR builtin)
+    uint32_t uplink;        // our current uplink address as DWORD
+
+    uint16_t adc_v0;        // raw voltage measured on input pin
+    int16_t rel_dist0;      // distance change in mm from last measurement
+    int16_t dist0;          // accumulated distance in mm (from power on)
+};
+
 //
 // Command packets
 //
@@ -506,6 +520,7 @@ typedef struct PacketCommand_t<CMD_GET_NAME, PayloadEmpty_t> PacketCommandGetNam
 typedef struct PacketCommand_t<CMD_SET_NAME, PayloadSetName_t> PacketCommandSetName_t;
 typedef struct PacketCommand_t<CMD_GET_PREFERRED_UPLINK, PayloadEmpty_t> PacketCommandGetPreferredUplink_t;
 typedef struct PacketCommand_t<CMD_SET_PREFERRED_UPLINK, PayloadSetPreferredUplink_t> PacketCommandSetPreferredUplink_t;
+
 // The telemetry interval is: how often the sensors wake up to send telemetry. They also listen for incoming
 //   packets for a while (the RX window of time). Then then the sensors go back to sleep. (as far as the
 //   base knows). At time of interval start, the sensors can be expected to start sending their latest
@@ -531,12 +546,16 @@ typedef struct PacketCommand_t<CMD_SET_INTERVAL, PayloadSetInterval_t> PacketCom
 typedef struct PacketCommand_t<CMD_GET_RADAR_CONFIG, PayloadEmpty_t> PacketCommandGetRadarConfig_t;
 typedef struct PacketCommand_t<CMD_CONFIG_LORA, PayloadConfigLoRa_t> PacketCommandConfigLoRa_t;
 typedef struct PacketCommand_t<CMD_CONFIG_RADAR, PayloadConfigRadar_t> PacketCommandConfigRadar_t;
+
 // prepare to receive dfu
 typedef struct PacketCommand_t<CMD_BEGIN_DFU_UPLOAD, PayloadBeginDFUUpload_t> PacketCommandBeginDFUUpload_t;
+
 // upload a dfu chunk
 typedef struct PacketCommand_t<CMD_DFU_UPLOAD, PayloadDFUUpload_t> PacketCommandDFUUpload_t;
+
 // finish dfu & verify
 typedef struct PacketCommand_t<CMD_VERIFY_DFU_UPLOAD, PayloadEmpty_t> PacketCommandVerifyDFUUpload_t;
+
 // blink the sensor's LEDs in a very visible way
 typedef struct PacketCommand_t<CMD_BLINK_LED, PayloadEmpty_t> PacketCommandBlinkLED_t;
 
@@ -568,6 +587,7 @@ typedef struct PacketReply_t<REPLY_VERIFY_DFU_UPLOAD, PayloadReplyVerifyDFUUploa
 typedef struct PacketTelemetry_t<RADAR_TELEMETRY, PayloadRadarTelemetry_t> PacketRadarTelemetry_t;
 typedef struct PacketTelemetry_t<RADAR_ALLM_TELEMETRY, PayloadRadarAllMTelemetry_t> PacketRadarAllMTelemetry_t;
 typedef struct PacketTelemetry_t<RADAR_GNSS_TELEMETRY, PayloadRadarGNSSTelemetry_t> PacketRadarGNSSTelemetry_t;
+typedef struct PacketTelemetry_t<RBEXT_TELEMETRY, PayloadRBExtTelemetry_t> PacketRBExtTelemetry_t;
 
 /*
 struct PacketHopInfo_t {     // broadcast this to inform other nodes
@@ -580,21 +600,21 @@ struct PacketHopInfo_t {     // broadcast this to inform other nodes
 #pragma pack(pop)
 
 // a helper class for working with device id's (addresses)
-class HHDeviceAddress_t{
+class LHDeviceAddress_t{
 public:
-    HHDeviceAddress_t(){
+    LHDeviceAddress_t(){
         SetDW(0x00000000);
     }
 
-    HHDeviceAddress_t(const PacketDeviceID_t &did){
+    LHDeviceAddress_t(const PacketDeviceID_t &did){
         SetDID(did);
     }
 
-    HHDeviceAddress_t(uint32_t dwid){
+    LHDeviceAddress_t(uint32_t dwid){
         SetDW(dwid);
     }
 
-    HHDeviceAddress_t(uint8_t oui_byte, uint8_t ic0, uint8_t ic1, uint8_t ic2){
+    LHDeviceAddress_t(uint8_t oui_byte, uint8_t ic0, uint8_t ic1, uint8_t ic2){
         IDArray[0] = oui_byte;
         IDArray[1] = ic0;
         IDArray[2] = ic1;
@@ -648,13 +668,13 @@ public:
     // @brief Write as hexadecimal ascii. doing it kind of ugly to be efficent on a microcontroller.
     // ..we dont want to create a bunch of C++ strings and other temporary objects.
     void ToHexStr(char stra[], size_t s_size) const {
-        s_size = std::min(s_size, (size_t)HOLYHOP_DID_HEXSTR_SIZE); // safety check
-        for (size_t i=0; i < HOLYHOP_DID_SIZE; i++) {
-            snprintf(stra + i * 2, HOLYHOP_DID_HEXSTR_SIZE - i * 2, "%02X", IDArray[i]);
+        s_size = std::min(s_size, (size_t)LOWHOP_DID_HEXSTR_SIZE); // safety check
+        for (size_t i=0; i < LOWHOP_DID_SIZE; i++) {
+            snprintf(stra + i * 2, LOWHOP_DID_HEXSTR_SIZE - i * 2, "%02X", IDArray[i]);
         }
     }
 
-    bool IsMatch(const HHDeviceAddress_t other_id) const{
+    bool IsMatch(const LHDeviceAddress_t other_id) const{
         return IDArray == other_id.IDArray;
     }
 
@@ -663,8 +683,8 @@ public:
     }
 
     // @brief Set id from DWORD
-    static HHDeviceAddress_t FromDWORD(uint32_t dwid){
-        HHDeviceAddress_t a_id(dwid);
+    static LHDeviceAddress_t FromDWORD(uint32_t dwid){
+        LHDeviceAddress_t a_id(dwid);
         return a_id;
     }
 
@@ -673,7 +693,7 @@ public:
     }
 
     bool IsNull() const{
-        return IsMatch( HHDeviceAddress_t() );
+        return IsMatch( LHDeviceAddress_t() );
     }
 
     bool IsBase() const{
@@ -685,15 +705,15 @@ public:
         return AString;
     }
 
-    bool operator ==(const HHDeviceAddress_t &other) const{
+    bool operator ==(const LHDeviceAddress_t &other) const{
         return IsMatch(other);
     }
 
-    bool operator !=(const HHDeviceAddress_t &other) const{
+    bool operator !=(const LHDeviceAddress_t &other) const{
         return !IsMatch(other);
     }
 
-    HHDeviceAddress_t & operator =(const HHDeviceAddress_t &other){
+    LHDeviceAddress_t & operator =(const LHDeviceAddress_t &other){
         IDArray = other.IDArray;
         c_str();
         return *this;
@@ -709,26 +729,26 @@ public:
         return c_str();
     }
 
-    std::array<uint8_t,HOLYHOP_DID_SIZE> IDArray;
+    std::array<uint8_t,LOWHOP_DID_SIZE> IDArray;
 private:
-    mutable char AString[HOLYHOP_DID_HEXSTR_SIZE]; // helper for string conversion
+    mutable char AString[LOWHOP_DID_HEXSTR_SIZE]; // helper for string conversion
 };
 
 #ifndef ARDUINO
-// fmt:: helper for HHDeviceAddress_t
-template <> struct fmt::formatter<HHDeviceAddress_t>: formatter<string_view> {
+// fmt:: helper for LHDeviceAddress_t
+template <> struct fmt::formatter<LHDeviceAddress_t>: formatter<string_view> {
     // parse is inherited from formatter<string_view>.
-    auto format(HHDeviceAddress_t dev_id, format_context& ctx) const -> format_context::iterator{
+    auto format(LHDeviceAddress_t dev_id, format_context& ctx) const -> format_context::iterator{
     string_view name = (const char *)dev_id;
         return formatter<string_view>::format(name, ctx);
     }
 };
 #endif
 
-#ifdef HOLYHOP_BASE
-struct HHQueuedCommand_t{
+#ifdef LOWHOP_BASE
+struct LHQueuedCommand_t{
     bool fsend_now;             // if true packet should be sent immediately, not at wake time. for debugging.
-    HHDeviceAddress_t dest_id;  // redundant?
+    LHDeviceAddress_t dest_id;  // redundant?
     PacketType_t pkt_type;
     uint8_t ref_id;
     int16_t pkt_size;
@@ -737,40 +757,40 @@ struct HHQueuedCommand_t{
 };
 #endif
 
-struct HHQueuedPacket_t{
+struct LHQueuedPacket_t{
     PacketType_t pkt_type;
     uint16_t pkt_size;
     std::array<uint8_t,LORA_MAX_PKT_SIZE> pkt_array; // hey arduino doesn't like this: = {};
 };
 
-struct HHNodeInfo_t {
-    HHDeviceAddress_t dev_id;   // device mesh id/address of pkt origin
-    HHDeviceAddress_t rev_relay_id;// node's traffic was relayed to US by this node (could be itself)
+struct LHNodeInfo_t {
+    LHDeviceAddress_t dev_id;   // device mesh id/address of pkt origin
+    LHDeviceAddress_t rev_relay_id;// node's traffic was relayed to US by this node (could be itself)
     bool flocal;                // true if node is local to us (1 hop)
-    uint16_t protocol_ver;      // HOLYHOP_VERSION
+    uint16_t protocol_ver;      // LOWHOP_VERSION
     uint16_t firmware_ver;      // sensor firmware version
     uint32_t bootloader_ver;    // sensor bootloader version
-    HHStrClass name;            // device's friendly name
+    LHStrClass name;            // device's friendly name
     time_t last_tx_time;        // unix time in sec when last we heard from node
     uint32_t tlm_offset_ms;     // offset from wake time that sensor should send it's telemetry
     uint16_t base_hops;         // how many hops from Base node reports that it is
     uint16_t relay_hops;        // how many hops last pkt from dev_id had taken thus far
     int16_t last_rssi;          // rssi of last received packet
     int8_t last_snr;            // SNR of last received packet
-#ifdef HOLYHOP_BASE
+#ifdef LOWHOP_BASE
     int32_t measurement_ms;     // how often sensor takes measurements
     PayloadReplyRadarConfig_t radar_cfg; // last received radar cfg if any
     uint32_t wake_count;        // last wake_count
-    std::deque<HHQueuedCommand_t> cmd_queue;    // cmds to be sent
-    std::deque<HHQueuedCommand_t> cmd_hist;     // sent commands. back() is current command
+    std::deque<LHQueuedCommand_t> cmd_queue;    // cmds to be sent
+    std::deque<LHQueuedCommand_t> cmd_hist;     // sent commands. back() is current command
     int reply_wait_count;                       // count cmd retries. 0: no active command
     PacketReplyStatus_t reply_status;
     std::filesystem::path fw_path;              // firmware update file pathname, if set then node is doing DFU
     uint32_t fw_offset;                         // current offset of upload
-    HHDeviceAddress_t preferred_uplink_id;      // node's preferred uplink if any
+    LHDeviceAddress_t preferred_uplink_id;      // node's preferred uplink if any
 #endif
 };
-// typedef std::unordered_map<PacketDeviceID_t,HHNodeInfo_t> HHNodeInfoMap_t;
+// typedef std::unordered_map<PacketDeviceID_t,LHNodeInfo_t> LHNodeInfoMap_t;
 //
 // // specializtion to make PacketDeviceID_t hashable
 // template<>
@@ -787,21 +807,21 @@ struct HHNodeInfo_t {
 class PacketDeviceIDStrHelper{
 public:
     PacketDeviceIDStrHelper(const PacketDeviceID_t &did){
-        HHDeviceAddress_t deva(did);
+        LHDeviceAddress_t deva(did);
         deva.ToHexStr(AString, sizeof(AString));
     }
 
-    // PacketDeviceIDStrHelper(const HHDeviceAddress_t &deva){
+    // PacketDeviceIDStrHelper(const LHDeviceAddress_t &deva){
     //     deva.ToHexStr(AString, sizeof(AString));
     // }
 
     // const char * c_str(){
-    //     AString[HOLYHOP_DID_HEXSTR_SIZE-1]=0; // enforce null-terminated
+    //     AString[LOWHOP_DID_HEXSTR_SIZE-1]=0; // enforce null-terminated
     //     return AString;
     // }
 
-    operator const HHStrClass() const{
-        return HHStrClass(AString);
+    operator const LHStrClass() const{
+        return LHStrClass(AString);
     }
 
     // auto format_as(PacketDeviceIDStrHelper &dsh) {
@@ -809,7 +829,7 @@ public:
     // }
 
 protected:
-    char AString[HOLYHOP_DID_HEXSTR_SIZE];
+    char AString[LOWHOP_DID_HEXSTR_SIZE];
 };
 
 #ifndef ARDUINO
@@ -828,9 +848,9 @@ int16_t GetPktSize(TPacket &pkt) {
     return sizeof(pkt);
 }
 
-// Dont remove from gHHNodes in callbacks
-struct HHEvents_t {
-#ifdef HOLYHOP_SENSOR
+// Dont remove from gLHNodes in callbacks
+struct LHEvents_t {
+#ifdef LOWHOP_SENSOR
     void (*OnCommandReset)(PacketCommandReset_t *);
     void (*OnCommandGetVersion)(PacketCommandGetVersion_t *);
     void (*OnCommandGetName)(PacketCommandGetName_t *);
@@ -849,7 +869,7 @@ struct HHEvents_t {
 
     void (*OnRelayPkt)(PacketHeader_t *ppkt_hdr, uint16_t size);
 #endif
-#ifdef HOLYHOP_BASE
+#ifdef LOWHOP_BASE
     void (*OnReplyVersion)(PacketReplyVersion_t *);
     void (*OnReplySuccess)(PacketReplySuccess_t *);
     void (*OnReplyFailure)(PacketReplyFailure_t *);
@@ -860,56 +880,56 @@ struct HHEvents_t {
     void (*OnReplyDFUUpload)(PacketReplyDFUUpload_t *);
     void (*OnReplyVerifyDFUUpload)(PacketReplyVerifyDFUUpload_t *);
     // NOTE OnReplyCmd is called before specific Reply handlers
-    void (*OnReplyCmd)(const HHDeviceAddress_t &dev_id, PacketType_t reply_type, PacketReplyStatus_t reply_status);
-    void (*OnReplyTimeout)(const HHDeviceAddress_t &dev_id);
+    void (*OnReplyCmd)(const LHDeviceAddress_t &dev_id, PacketType_t reply_type, PacketReplyStatus_t reply_status);
+    void (*OnReplyTimeout)(const LHDeviceAddress_t &dev_id);
 #endif
-    void (*OnTelemetry)(const HHDeviceAddress_t &dev_id, uint8_t base_hops);
+    void (*OnTelemetry)(const LHDeviceAddress_t &dev_id, uint8_t base_hops);
     void (*OnRadarTelemetry)(PacketRadarTelemetry_t *);
     void (*OnRadarGNSSTelemetry)(PacketRadarGNSSTelemetry_t *);
 
-    void (*OnNewNode)(const HHDeviceAddress_t &dev_id);
+    void (*OnNewNode)(const LHDeviceAddress_t &dev_id);
 };
 
-void InitHH(bool fbase, const HHDeviceAddress_t &local_dev_id, HHEvents_t &events);
-bool ProcessHHPkt(PacketHeader_t *ppkt_hdr, uint16_t size, int16_t this_rssi, int16_t this_snr);
-void ReorderHHNodeTlmOffsets();
-std::time_t GetHHWakeTime();
-uint32_t GetHHWakeElapsed();
-uint32_t GetHHWakeNextMS();
-uint32_t GetHHWakeInterval();
-void SetHHWakeNext( int32_t start_in_sec, uint32_t tlm_int_sec );
-void SetHHWakeInterval( uint32_t tlm_int_sec);
-HHStrClass GetHHNodeName(const HHDeviceAddress_t &dev_id);
-uint32_t GetHHNodeTlmOffsetMs(const HHDeviceAddress_t &dev_id);
-//uint32_t GetHHNodeWakeCount(const HHDeviceAddress_t &dev_id);
-void SetHHNodeTimedOut(const HHDeviceAddress_t &dev_id);
-uint16_t GetHHBaseHops();
-HHDeviceAddress_t GetHHUplinkAddr();
-HHDeviceAddress_t GetHHPreferredUplinkAddr();
-bool GetHHNextHopFor(const PacketDeviceID_t &dest_id, HHDeviceAddress_t &relay_to);
-bool ExpireHHOldNodes();
-void UpdateHHDatetimes( const std::time_t time_offset );
-bool UpdateHHNetworkState();
-bool IsHHUplinkValid(); //(const HHDeviceAddress_t &dev_id);
-bool SetHHUplink(const HHDeviceAddress_t &dev_id);
-const char * GetHHPktTypeName(PacketType_t pkt_type);
-const char * GetHHPktReplyStatusName(PacketReplyStatus_t status);
+void InitLH(bool fbase, const LHDeviceAddress_t &local_dev_id, LHEvents_t &events);
+bool ProcessLHPkt(PacketHeader_t *ppkt_hdr, uint16_t size, int16_t this_rssi, int16_t this_snr);
+void ReorderLHNodeTlmOffsets();
+std::time_t GetLHWakeTime();
+uint32_t GetLHWakeElapsed();
+uint32_t GetLHWakeNextMS();
+uint32_t GetLHWakeInterval();
+void SetLHWakeNext( int32_t start_in_sec, uint32_t tlm_int_sec );
+void SetLHWakeInterval( uint32_t tlm_int_sec);
+LHStrClass GetLHNodeName(const LHDeviceAddress_t &dev_id);
+uint32_t GetLHNodeTlmOffsetMs(const LHDeviceAddress_t &dev_id);
+//uint32_t GetLHNodeWakeCount(const LHDeviceAddress_t &dev_id);
+void SetLHNodeTimedOut(const LHDeviceAddress_t &dev_id);
+uint16_t GetLHBaseHops();
+LHDeviceAddress_t GetLHUplinkAddr();
+LHDeviceAddress_t GetLHPreferredUplinkAddr();
+bool GetLHNextHopFor(const PacketDeviceID_t &dest_id, LHDeviceAddress_t &relay_to);
+bool ExpireLHOldNodes();
+void UpdateLHDatetimes( const std::time_t time_offset );
+bool UpdateLHNetworkState();
+bool IsLHUplinkValid(); //(const LHDeviceAddress_t &dev_id);
+bool SetLHUplink(const LHDeviceAddress_t &dev_id);
+const char * GetLHPktTypeName(PacketType_t pkt_type);
+const char * GetLHPktReplyStatusName(PacketReplyStatus_t status);
 
-#ifdef HOLYHOP_BASE
-const std::vector<HHNodeInfo_t> & GetHHNodes();
-HHNodeInfo_t InitHHNodeInfo();
-void AddHHNode(const HHNodeInfo_t &node_info);
-void QueueHHNodeCmd(HHQueuedCommand_t &qcmd, bool frem_dupes);
-bool NextHHQCmd(HHQueuedCommand_t &qnowcmd);
-//void OverrideHHCmdQ(const HHDeviceAddress_t &dev_id, const HHQueuedCommand_t &qnowcmd);
-void IncrementHHCmdQ(const HHDeviceAddress_t &dev_id);
-void RemoveHHQOldCmds();
-uint32_t GetHHNodeFWOffset(const HHDeviceAddress_t &dev_id);
-void SetHHNodeFWOffset(const HHDeviceAddress_t &dev_id, uint32_t fw_offset);
-void ClearHHNodeFWPath(const HHDeviceAddress_t &dev_id );
-std::filesystem::path GetHHNodeFWPath(const HHDeviceAddress_t &dev_id);
-HHDeviceAddress_t GetHHNodePreferredUplink(const HHDeviceAddress_t &dev_id);
-void SetHHNodePreferredUplink(const HHDeviceAddress_t &uplink_id);
-bool GetHHFlagResyncAll();
-void ClearHHFlagResyncAll();
+#ifdef LOWHOP_BASE
+const std::vector<LHNodeInfo_t> & GetLHNodes();
+LHNodeInfo_t InitLHNodeInfo();
+void AddLHNode(const LHNodeInfo_t &node_info);
+void QueueLHNodeCmd(LHQueuedCommand_t &qcmd, bool frem_dupes);
+bool NextLHQCmd(LHQueuedCommand_t &qnowcmd);
+//void OverrideLHCmdQ(const LHDeviceAddress_t &dev_id, const LHQueuedCommand_t &qnowcmd);
+void IncrementLHCmdQ(const LHDeviceAddress_t &dev_id);
+void RemoveLHQOldCmds();
+uint32_t GetLHNodeFWOffset(const LHDeviceAddress_t &dev_id);
+void SetLHNodeFWOffset(const LHDeviceAddress_t &dev_id, uint32_t fw_offset);
+void ClearLHNodeFWPath(const LHDeviceAddress_t &dev_id );
+std::filesystem::path GetLHNodeFWPath(const LHDeviceAddress_t &dev_id);
+LHDeviceAddress_t GetLHNodePreferredUplink(const LHDeviceAddress_t &dev_id);
+void SetLHNodePreferredUplink(const LHDeviceAddress_t &uplink_id);
+bool GetLHFlagResyncAll();
+void ClearLHFlagResyncAll();
 #endif

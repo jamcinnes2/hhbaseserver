@@ -23,7 +23,7 @@
 /// radar sensor net base server app
 //
 
-#include "holyhop.h"
+#include "lowhop.h"
 #include "loracomms.h"
 #include "webservice.h"
 #include "forwarddata.h"
@@ -59,8 +59,10 @@ int main(int argc, char** argv) {
     while( IsWebServiceAlive(10) ){
         ProcessLoRa();
 
-        // if radio isn't busy (if we are not in RX Window), post data
-        if ( GetSecPastRXWindow() >= POST_AFTER_RXWINDOW_SEC ){
+        // if radio isn't busy (if we are not in RX Window), post data.
+        // or if the rx window is too short to wait around, post data.
+        if ( GetSecPastRXWindow() >= POST_AFTER_RXWINDOW_SEC ||
+             GetLHWakeInterval() <= LOWHOP_RX_WINDOW_SEC+POST_AFTER_RXWINDOW_SEC ){
             WakeSensorDataWorker();
         }
 

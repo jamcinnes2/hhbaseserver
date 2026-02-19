@@ -27,7 +27,7 @@
 #include <deque>
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #include <httplib.h>
-#include "holyhop.h"
+#include "lowhop.h"
 #include "forwarddata.h"
 //#include "teestream.h"
 
@@ -82,7 +82,7 @@ void LoadSensorPostURLs(){
 
 // @brief queue telemetry for posting to cloud service
 // pass json data string
-void QueueSensorDataPost( const HHDeviceAddress_t &src_id, const std::string &sdata_str ){
+void QueueSensorDataPost( const LHDeviceAddress_t &src_id, const std::string &sdata_str ){
     // lookup this sensor's POST url
     std::string thingsb_url = gWebSiteMap[src_id]; //"https://localhost:1231/api/v1/hm8tggic95ik2x16fylsp/telemetry";
     //std::cout << "websitemap: " << thingsb_url << std::endl;

@@ -35,7 +35,7 @@
 #include <charconv>
 #include <RadioLib.h>
 #include "hal/RPi/PiHal.h" // radiolib hardware abstraction layer
-#include "holyhop.h"
+#include "lowhop.h"
 #include "loracomms.h"
 #include "timer.h"
 #include "threadsafequeue.h"
@@ -78,9 +78,9 @@ temp C,base hops,uplink";
 PiHal *hal = new PiHal(LORA_SPI);
 SX1262 radio = new Module(hal, LORA_CS, LORA_DIO1, LORA_RST, LORA_BUSY );// RADIOLIB_NC);
 
-HHDeviceAddress_t gLocalDID(KnownOUI_t::BASE,0,0,1); // our device id
-HHDeviceAddress_t gLastCmdDestID;   // destination id of most recently sent cmd
-HHDeviceAddress_t gNewNodeDID;      // tracks the newest node for sync logic in OnRadarTelemetry
+LHDeviceAddress_t gLocalDID(KnownOUI_t::BASE,0,0,1); // our device id
+LHDeviceAddress_t gLastCmdDestID;   // destination id of most recently sent cmd
+LHDeviceAddress_t gNewNodeDID;      // tracks the newest node for sync logic in OnRadarTelemetry
 uint8_t gLoRaSendBuf[LORA_MAX_PKT_SIZE];
 size_t gLoRaSendBufLen = 0;         // if non-zero there is a pkt to send
 SimpleTimer gLoRaWaitReply;         // if active we are waiting to RX a packet
@@ -94,33 +94,33 @@ void OnRadioInterrupt(void) {
 
 // forward declarations
 template<class TPacket>
-void QueueHHCmd(TPacket &pkt, const HHDeviceAddress_t &dst_id, bool fsend_now, std::filesystem::path fw_path);
+void QueueLHCmd(TPacket &pkt, const LHDeviceAddress_t &dst_id, bool fsend_now, std::filesystem::path fw_path);
 template<class TPacket>
-void QueueHHCmd(TPacket &pkt, const HHDeviceAddress_t &dst_id);
+void QueueLHCmd(TPacket &pkt, const LHDeviceAddress_t &dst_id);
 
-// HolyHop Event handlers
-void OnHHReplyVersion(PacketReplyVersion_t *);
-void OnHHReplySuccess(PacketReplySuccess_t *);
-void OnHHReplyFailure(PacketReplyFailure_t *);
-void OnHHReplyName(PacketReplyName_t *);
-void OnHHReplyPreferredUplink(PacketReplyPreferredUplink_t *);
-void OnHHReplyInterval(PacketReplyInterval_t *);
-void OnHHReplyRadarConfig(PacketReplyRadarConfig_t *);
-void OnHHReplyDFUUpload(PacketReplyDFUUpload_t *);
-void OnHHReplyVerifyDFUUpload(PacketReplyVerifyDFUUpload_t *);
-void OnHHRadarTelemetry(PacketRadarTelemetry_t *);
-void OnHHNewNode( const HHDeviceAddress_t &src_id );
-void OnHHReplyCmd( const HHDeviceAddress_t &src_id );
+// LowHop Event handlers
+void OnLHReplyVersion(PacketReplyVersion_t *);
+void OnLHReplySuccess(PacketReplySuccess_t *);
+void OnLHReplyFailure(PacketReplyFailure_t *);
+void OnLHReplyName(PacketReplyName_t *);
+void OnLHReplyPreferredUplink(PacketReplyPreferredUplink_t *);
+void OnLHReplyInterval(PacketReplyInterval_t *);
+void OnLHReplyRadarConfig(PacketReplyRadarConfig_t *);
+void OnLHReplyDFUUpload(PacketReplyDFUUpload_t *);
+void OnLHReplyVerifyDFUUpload(PacketReplyVerifyDFUUpload_t *);
+void OnLHRadarTelemetry(PacketRadarTelemetry_t *);
+void OnLHNewNode( const LHDeviceAddress_t &src_id );
+void OnLHReplyCmd( const LHDeviceAddress_t &src_id );
 
-ThreadSafeQueue<HHQueuedCommand_t> gHHCmdQueue;
+ThreadSafeQueue<LHQueuedCommand_t> gLHCmdQueue;
 std::mutex gSharedDataMutex;
 std::condition_variable gSharedDataCV;
 std::atomic<bool> gfGetNodesMeta(false);
 std::atomic<bool> gfReorderTlmOffsets(false);
 std::atomic<bool> gfRestartWakeInterval(false);
 std::atomic<bool> gfManuallyAddNode(false);
-HHDeviceAddress_t gManuallyAddNodeID;       // add this node to array
-std::vector<HHNodeMeta_t> gHHNodesMeta;     // web service thread accesses this
+LHDeviceAddress_t gManuallyAddNodeID;       // add this node to array
+std::vector<LHNodeMeta_t> gLHNodesMeta;     // web service thread accesses this
 
 std::string CTimeToStr( std::time_t ct ){
     std::tm *ptime = std::localtime(&ct);
@@ -163,7 +163,7 @@ std::string RadarCfgToPrettyStr( const RadarConfiguration_t &rcfg ){
     return rcfg_ss.str();
 }
 
-bool GetCSVNodeID( const std::string &str, HHDeviceAddress_t &dev_id ){
+bool GetCSVNodeID( const std::string &str, LHDeviceAddress_t &dev_id ){
     // tokenize CSV
     std::istringstream iss(str);
     std::vector<std::string> substrs;
@@ -190,7 +190,7 @@ bool GetCSVNodeID( const std::string &str, HHDeviceAddress_t &dev_id ){
     return false;
 }
 
-// Scan sensor log files for nodes we have heard in the past & add the nodes to holyhop array
+// Scan sensor log files for nodes we have heard in the past & add the nodes to lowhop array
 void ScanLogsForNodes(){
     // open directory to iterate files
     std::filesystem::path sensordata_path(SENSOR_DATA_DIR);
@@ -216,11 +216,11 @@ void ScanLogsForNodes(){
             while (std::getline(ilog_file, line_str)) {
                 if (line_str.empty())
                     continue;   // Ignore empty lines
-                HHDeviceAddress_t dev_id;
+                LHDeviceAddress_t dev_id;
                 if ( GetCSVNodeID( line_str, dev_id ) ){
-                    HHNodeInfo_t node = InitHHNodeInfo();
+                    LHNodeInfo_t node = InitLHNodeInfo();
                     node.dev_id = dev_id;
-                    AddHHNode(node);
+                    AddLHNode(node);
                 }
             }
             ilog_file.close();
@@ -237,7 +237,7 @@ void twrite( std::ofstream &ofile, TData data_obj ){
 }
 
 template<>
-void twrite<HHStrClass>( std::ofstream &ofile, HHStrClass data_obj ){
+void twrite<LHStrClass>( std::ofstream &ofile, LHStrClass data_obj ){
     uint16_t slen = std::min( data_obj.length(), (size_t)256 );   // limit to 256 chars
     ofile.write( reinterpret_cast<char *>(&slen), sizeof(slen));
     ofile.write( data_obj.c_str(), data_obj.length() );
@@ -249,7 +249,7 @@ void tread( std::ifstream &ifile, TData &data_obj ){
 }
 
 template<>
-void tread<HHStrClass>( std::ifstream &ifile, HHStrClass &data_obj ){
+void tread<LHStrClass>( std::ifstream &ifile, LHStrClass &data_obj ){
     uint16_t slen = 0;
     ifile.read(reinterpret_cast<char *>(&slen), sizeof(slen));
     char buf[256];
@@ -267,10 +267,10 @@ bool SaveNetworkState(){
         return false;
     }
     ofile.write(BASE_NETSTATE_VERSION.data(), BASE_NETSTATE_VERSION.size() );
-    twrite(ofile, GetHHWakeTime());
-    twrite(ofile, GetHHWakeInterval());
+    twrite(ofile, GetLHWakeTime());
+    twrite(ofile, GetLHWakeInterval());
 
-    const std::vector<HHNodeInfo_t> &nodes = GetHHNodes();
+    const std::vector<LHNodeInfo_t> &nodes = GetLHNodes();
     size_t num_nodes = nodes.size();
     twrite(ofile, num_nodes);
     //ofile.write( (char *)num_nodes, sizeof(num_nodes) );
@@ -282,7 +282,7 @@ bool SaveNetworkState(){
         twrite(ofile, node.wake_count);
         twrite(ofile, node.last_tx_time);
         twrite(ofile, node.base_hops);
-        twrite<HHStrClass>(ofile, node.name);
+        twrite<LHStrClass>(ofile, node.name);
     }
     return true;
 }
@@ -326,14 +326,14 @@ bool LoadNetworkState(){
         interval_offset_sec = wake_interval_sec - (diff_sec % wake_interval_sec);
         TSLogs << fmt::format("Calculated next wake will be in {} sec, diff_sec {}\n", interval_offset_sec, diff_sec );
     }
-    SetHHWakeNext( interval_offset_sec, wake_interval_sec );
+    SetLHWakeNext( interval_offset_sec, wake_interval_sec );
 
     // Load Nodes
     size_t num_nodes;
     tread(ifile, num_nodes);
     //ofile.write( (char *)num_nodes, sizeof(num_nodes) );
     for (size_t i=0; i<num_nodes; i++){
-        HHNodeInfo_t node = InitHHNodeInfo();
+        LHNodeInfo_t node = InitLHNodeInfo();
         uint32_t dw_id;
         tread(ifile, dw_id);
         node.dev_id.SetDW(dw_id);
@@ -343,9 +343,9 @@ bool LoadNetworkState(){
         tread(ifile, node.wake_count);
         tread(ifile, node.last_tx_time);
         tread(ifile, node.base_hops);
-        tread<HHStrClass>(ifile, node.name);
+        tread<LHStrClass>(ifile, node.name);
 
-        AddHHNode( node );
+        AddLHNode( node );
     }
     return true;
 }
@@ -388,8 +388,8 @@ void LogSensorData( const char *astr ){
 }
 
 // A command reply matching dev_id's last sent command ref_id arrived.
-void OnHHReplyCmd( const HHDeviceAddress_t &dev_id, PacketType_t reply_type, PacketReplyStatus_t reply_status ){
-    TSLogs.Time() << "OnHHReplyCmd\n";
+void OnLHReplyCmd( const LHDeviceAddress_t &dev_id, PacketType_t reply_type, PacketReplyStatus_t reply_status ){
+    TSLogs.Time() << "OnLHReplyCmd\n";
     // sanity check it is from the correct node
     if ( dev_id == gLastCmdDestID )
         gLoRaWaitReply.stop(); // stop wait timer
@@ -400,88 +400,88 @@ void OnHHReplyCmd( const HHDeviceAddress_t &dev_id, PacketType_t reply_type, Pac
     }
 }
 
-void OnHHReplyTimeout(const HHDeviceAddress_t &dev_id){
-    TSLogs.Time() << "OnHHReplyTimeout\n";
+void OnLHReplyTimeout(const LHDeviceAddress_t &dev_id){
+    TSLogs.Time() << "OnLHReplyTimeout\n";
     gLoRaWaitReply.stop(); // stop wait timer
 }
 
-void OnHHReplyVersion(PacketReplyVersion_t *ppkt){
-    TSLogs.Time() << fmt::format("OnHHReplyVersion hh_version 0x{:04X} fw_version 0x{:04X} bl_version 0x{:08X}\n",
-        ppkt->Payload.hh_version, ppkt->Payload.fw_version, ppkt->Payload.bl_version);
+void OnLHReplyVersion(PacketReplyVersion_t *ppkt){
+    TSLogs.Time() << fmt::format("OnLHReplyVersion lh_version 0x{:04X} fw_version 0x{:04X} bl_version 0x{:08X}\n",
+        ppkt->Payload.lh_version, ppkt->Payload.fw_version, ppkt->Payload.bl_version);
 
-    if ( ppkt->Payload.hh_version != HOLYHOP_VERSION ){
+    if ( ppkt->Payload.lh_version != LOWHOP_VERSION ){
         PacketDeviceIDStrHelper src_id_str(ppkt->Header.Src);
-        TSLogs.Time() << fmt::format("Warning! HolyHop version mismatch. Our version 0x{:04X}. ", HOLYHOP_VERSION);
-        TSLogs.Time() << fmt::format("Node {} version 0x{:04X}.\n", src_id_str, ppkt->Payload.hh_version);
+        TSLogs.Time() << fmt::format("Warning! LowHop version mismatch. Our version 0x{:04X}. ", LOWHOP_VERSION);
+        TSLogs.Time() << fmt::format("Node {} version 0x{:04X}.\n", src_id_str, ppkt->Payload.lh_version);
     }
 }
 
-void OnHHReplySuccess(PacketReplySuccess_t *){
-    TSLogs.Time() << "OnHHReplySuccess\n";
+void OnLHReplySuccess(PacketReplySuccess_t *){
+    TSLogs.Time() << "OnLHReplySuccess\n";
 }
 
-void OnHHReplyFailure(PacketReplyFailure_t *){
-    TSLogs.Time() << "OnHHReplyFailure\n";
+void OnLHReplyFailure(PacketReplyFailure_t *){
+    TSLogs.Time() << "OnLHReplyFailure\n";
 }
 
-void OnHHReplyName(PacketReplyName_t *ppkt){
+void OnLHReplyName(PacketReplyName_t *ppkt){
     PacketDeviceIDStrHelper src_id_str(ppkt->Header.Src);
     std::string node_name = ppkt->Payload.name.Get();
-    TSLogs.Time() << fmt::format("OnHHReplyName node {} name {}\n", src_id_str, node_name);
+    TSLogs.Time() << fmt::format("OnLHReplyName node {} name {}\n", src_id_str, node_name);
 }
 
-void OnHHReplyPreferredUplink(PacketReplyPreferredUplink_t *ppkt){
+void OnLHReplyPreferredUplink(PacketReplyPreferredUplink_t *ppkt){
     PacketDeviceIDStrHelper src_id_str(ppkt->Header.Src);
     uint32_t prf_uplink_id = ppkt->Payload.uplink;
-    TSLogs.Time() << fmt::format("OnHHReplyPreferredUplink node {} preferred uplink {}\n",
-                                    src_id_str, HHDeviceAddress_t(prf_uplink_id));
+    TSLogs.Time() << fmt::format("OnLHReplyPreferredUplink node {} preferred uplink {}\n",
+                                    src_id_str, LHDeviceAddress_t(prf_uplink_id));
 }
 
-void OnHHReplyInterval(PacketReplyInterval_t *ppkt){
+void OnLHReplyInterval(PacketReplyInterval_t *ppkt){
     PacketDeviceIDStrHelper src_id_str(ppkt->Header.Src);
-    TSLogs.Time() << fmt::format("OnHHReplyInterval node {} wake_sec {} measurement_ms {}\n",
+    TSLogs.Time() << fmt::format("OnLHReplyInterval node {} wake_sec {} measurement_ms {}\n",
         src_id_str, ppkt->Payload.tlm_int_sec, ppkt->Payload.measurement_ms);
 }
 
 // The send interval pkt payload is timing sensitive. Fill it out.
-void UpdateCmdSendIntervalPkt( PacketCommandSetInterval_t &pkt_cmd_int, const HHDeviceAddress_t &dev_id ){
+void UpdateCmdSendIntervalPkt( PacketCommandSetInterval_t &pkt_cmd_int, const LHDeviceAddress_t &dev_id ){
     //todo: recalc tlm_offset_ms if node mesh location/hops change
-    pkt_cmd_int.Payload.measurement_ms  = GetHHWakeInterval() * 1000; //HOLYHOP_DEFAULT_TLM_INTERVAL_SEC * 1000;
-    pkt_cmd_int.Payload.tlm_int_sec     = GetHHWakeInterval();
-    pkt_cmd_int.Payload.next_tlm_ms     = GetHHWakeNextMS();
-    pkt_cmd_int.Payload.tlm_offset_ms   = GetHHNodeTlmOffsetMs(dev_id);
+    pkt_cmd_int.Payload.measurement_ms  = GetLHWakeInterval() * 1000; //LOWHOP_DEFAULT_TLM_INTERVAL_SEC * 1000;
+    pkt_cmd_int.Payload.tlm_int_sec     = GetLHWakeInterval();
+    pkt_cmd_int.Payload.next_tlm_ms     = GetLHWakeNextMS();
+    pkt_cmd_int.Payload.tlm_offset_ms   = GetLHNodeTlmOffsetMs(dev_id);
     pkt_cmd_int.Payload.etime_sec       = std::time(nullptr); // current time in epoch sec
 }
 
 // @brief synchronize node by sending setinterval command. Normally SENDNOW.
 // But can be queued for later as well.
-void CmdNodeToSync( const HHDeviceAddress_t &dev_id, bool fsend_now=true ){
+void CmdNodeToSync( const LHDeviceAddress_t &dev_id, bool fsend_now=true ){
     TSLogs.Time() << "CmdNodeToSync() " << dev_id << "\n";
     PacketCommandSetInterval_t pkt_cmd_int;
     UpdateCmdSendIntervalPkt( pkt_cmd_int, dev_id );
-    QueueHHCmd(pkt_cmd_int, dev_id, fsend_now, {});
+    QueueLHCmd(pkt_cmd_int, dev_id, fsend_now, {});
 }
 
 // @brief ask remote node for its info and sync it with setinterval
-void QueryNodeInfo( const HHDeviceAddress_t &dev_id ){
+void QueryNodeInfo( const LHDeviceAddress_t &dev_id ){
     TSLogs.Time() << fmt::format("Query node info: {}\n", dev_id);
     // ask node for its version, name, prf uplink
     //todo: consolidate these into one cmd/reply in new protocol version?
     PacketCommandGetVersion_t pkt_cmd_ver;
-    QueueHHCmd(pkt_cmd_ver, dev_id );
+    QueueLHCmd(pkt_cmd_ver, dev_id );
 
     PacketCommandGetName_t pkt_cmd_name;
-    QueueHHCmd(pkt_cmd_name, dev_id);
+    QueueLHCmd(pkt_cmd_name, dev_id);
 
     PacketCommandGetPreferredUplink_t pkt_cmd_prfupl;
-    QueueHHCmd(pkt_cmd_prfupl, dev_id);
+    QueueLHCmd(pkt_cmd_prfupl, dev_id);
 }
 
-void OnHHReplyRadarConfig( PacketReplyRadarConfig_t *ppkt ){
-    HHDeviceAddress_t src_id(ppkt->Header.Src);
+void OnLHReplyRadarConfig( PacketReplyRadarConfig_t *ppkt ){
+    LHDeviceAddress_t src_id(ppkt->Header.Src);
     RadarConfiguration_t rcfg;
     PayloadRadarCfgToRadarCfg(ppkt->Payload, rcfg);
-    std::string node_name = GetHHNodeName(src_id);
+    std::string node_name = GetLHNodeName(src_id);
 
     // print to console log
     std::stringstream console_fmt_ss;
@@ -507,9 +507,9 @@ void OnHHReplyRadarConfig( PacketReplyRadarConfig_t *ppkt ){
 }
 
 // RETURNS: size of device's current fw upload file
-std::streamsize GetFWFileSize( const HHDeviceAddress_t &dev_id){
+std::streamsize GetFWFileSize( const LHDeviceAddress_t &dev_id){
     // open fw file
-    std::filesystem::path fw_path = GetHHNodeFWPath(dev_id);
+    std::filesystem::path fw_path = GetLHNodeFWPath(dev_id);
     std::ifstream fw_file( fw_path, std::ios::binary );
     if ( !fw_file ){
         TSLogs.Time() << fmt::format("GetFWFileSize failed could not open {}!\n",
@@ -528,9 +528,9 @@ std::streamsize GetFWFileSize( const HHDeviceAddress_t &dev_id){
     return fw_size;
 }
 
-void OnHHReplyDFUUpload( PacketReplyDFUUpload_t *ppkt ){
-    HHDeviceAddress_t src_id(ppkt->Header.Src);
-    SetHHNodeFWOffset(src_id, ppkt->Payload.current_offset);    // use this as current offset
+void OnLHReplyDFUUpload( PacketReplyDFUUpload_t *ppkt ){
+    LHDeviceAddress_t src_id(ppkt->Header.Src);
+    SetLHNodeFWOffset(src_id, ppkt->Payload.current_offset);    // use this as current offset
 
     // dfu update began or continues.. success?
     if ( !ppkt->Payload.fsuccess ){
@@ -540,8 +540,8 @@ void OnHHReplyDFUUpload( PacketReplyDFUUpload_t *ppkt ){
 
     // success. do next chunk or if done verify
     std::streamsize fw_size = GetFWFileSize(src_id);
-    size_t fw_offset = GetHHNodeFWOffset(src_id);
-    TSLogs << "DEBUG OnHHReplyDFUUpload fw_size " << fw_size << ", fw_offset " << fw_offset << "\n";
+    size_t fw_offset = GetLHNodeFWOffset(src_id);
+    TSLogs << "DEBUG OnLHReplyDFUUpload fw_size " << fw_size << ", fw_offset " << fw_offset << "\n";
 
     // are we done?
     std::streamsize fw_size_left = fw_size - fw_offset;
@@ -550,7 +550,7 @@ void OnHHReplyDFUUpload( PacketReplyDFUUpload_t *ppkt ){
 
         PacketCommandVerifyDFUUpload_t pkt_vdfu;
         bool fsend_now = true; // ..send now to finish the DFU. dest node should still be listening
-        QueueHHCmd(pkt_vdfu, src_id, fsend_now, {});
+        QueueLHCmd(pkt_vdfu, src_id, fsend_now, {});
         return;
     }
 
@@ -558,17 +558,17 @@ void OnHHReplyDFUUpload( PacketReplyDFUUpload_t *ppkt ){
     PacketCommandDFUUpload_t pkt_dfu;
     bool fsend_now = true;  // we successfully started/resumed fw update so
                             // ..send now true to continously stream the fw chunks
-    QueueHHCmd(pkt_dfu, src_id, fsend_now, {});
+    QueueLHCmd(pkt_dfu, src_id, fsend_now, {});
 }
 
 // @brief build command packet to upload next chunk of firmware to node
-void BuildDFUUploadCmd( HHQueuedCommand_t &qcmd ){ //const HHDeviceAddress_t &dev_id, PacketCommandDFUUpload_t &pkt_dfu ){
+void BuildDFUUploadCmd( LHQueuedCommand_t &qcmd ){ //const LHDeviceAddress_t &dev_id, PacketCommandDFUUpload_t &pkt_dfu ){
     uint8_t dfu_chunk_size = sizeof(PayloadDFUUpload_t::barray);
-    HHDeviceAddress_t &dev_id = qcmd.dest_id;
+    LHDeviceAddress_t &dev_id = qcmd.dest_id;
     PacketCommandDFUUpload_t &pkt_dfu = *reinterpret_cast<PacketCommandDFUUpload_t *>(qcmd.cmd_pkt_buf.data());
 
     // open fw file
-    std::filesystem::path fw_path = GetHHNodeFWPath(dev_id);
+    std::filesystem::path fw_path = GetLHNodeFWPath(dev_id);
     std::ifstream fw_file( fw_path, std::ios::binary );
     if ( !fw_file ){
         TSLogs.Time() << fmt::format("DFU Upload failed could not open {}\n",
@@ -577,7 +577,7 @@ void BuildDFUUploadCmd( HHQueuedCommand_t &qcmd ){ //const HHDeviceAddress_t &de
     }
 
     // get file size then seek to current offset
-    std::streamsize fw_offset = GetHHNodeFWOffset(dev_id);
+    std::streamsize fw_offset = GetLHNodeFWOffset(dev_id);
     fw_file.seekg(0, std::ios_base::end);
     std::streamsize fw_size = fw_file.tellg();
     fw_file.seekg(fw_offset);
@@ -613,11 +613,11 @@ void BuildDFUUploadCmd( HHQueuedCommand_t &qcmd ){ //const HHDeviceAddress_t &de
     TSLogs.Time() << fmt::format("$$$ DFU uploading chunk to {} offset {} size {}\n", dev_id, fw_offset, this_chunk_size);
 }
 
-void OnHHReplyVerifyDFUUpload( PacketReplyVerifyDFUUpload_t *ppkt ){
-    HHDeviceAddress_t src_id(ppkt->Header.Src);
+void OnLHReplyVerifyDFUUpload( PacketReplyVerifyDFUUpload_t *ppkt ){
+    LHDeviceAddress_t src_id(ppkt->Header.Src);
 
     // is node even doing an update right now?
-    if ( GetHHNodeFWPath(src_id).empty() ){
+    if ( GetLHNodeFWPath(src_id).empty() ){
         TSLogs.Time() << fmt::format("Received PacketReplyVerifyDFUUpload but {} is not doing DFU! Ignoring.\n",
                                       src_id);
         return;
@@ -630,14 +630,14 @@ void OnHHReplyVerifyDFUUpload( PacketReplyVerifyDFUUpload_t *ppkt ){
     }
 
     TSLogs.Time() << fmt::format("$$$ DFU upload verified on {}, ready to reboot sensor\n", src_id);
-    ClearHHNodeFWPath(src_id);
+    ClearLHNodeFWPath(src_id);
     TSLogs.Time() << fmt::format("Rebooting sensor for DFU {}\n", src_id);
     PacketCommandReset_t pkt;
-    QueueHHCmd(pkt, src_id);
+    QueueLHCmd(pkt, src_id);
 }
 
-void OnHHRadarTelemetry(PacketRadarTelemetry_t *ppkt){
-    HHDeviceAddress_t src_id(ppkt->Header.Src);
+void OnLHRadarTelemetry(PacketRadarTelemetry_t *ppkt){
+    LHDeviceAddress_t src_id(ppkt->Header.Src);
     uint8_t base_hops = ppkt->BaseHops;
     PayloadRadarTelemetry_t &payload = ppkt->Payload;
     // scale and fix radar telemetry.
@@ -648,7 +648,7 @@ void OnHHRadarTelemetry(PacketRadarTelemetry_t *ppkt){
     float local_rssi = radio.getRSSI();
     float local_snr = radio.getSNR();
     float local_freq_off = radio.getFrequencyError();
-    std::string node_name = GetHHNodeName(src_id);
+    std::string node_name = GetLHNodeName(src_id);
     std::string uplink_str = fmt::format("{:08X}", payload.uplink);
 
     // print to console log with labels because its convienent for debugging
@@ -709,7 +709,7 @@ void OnHHRadarTelemetry(PacketRadarTelemetry_t *ppkt){
     if (src_id != gNewNodeDID){
         // If node is outside of the RX window or it is not in sync yet, sync it.
         bool fin_sync = base_hops >= 1;
-        bool foutside_rxw = GetHHWakeElapsed() > HOLYHOP_RX_WINDOW_SEC;
+        bool foutside_rxw = GetLHWakeElapsed() > LOWHOP_RX_WINDOW_SEC;
         if ( !fin_sync || foutside_rxw ){
             TSLogs.Time() << fmt::format("Node telemetry is out of sync: {}\n", src_id);
             CmdNodeToSync(src_id);
@@ -729,8 +729,8 @@ void OnHHRadarTelemetry(PacketRadarTelemetry_t *ppkt){
     }
 }
 /*
-void OnHHRadarGNSSTelemetry(PacketRadarGNSSTelemetry_t *ppkt){
-    HHDeviceAddress_t src_id(ppkt->Header.Src);
+void OnLHRadarGNSSTelemetry(PacketRadarGNSSTelemetry_t *ppkt){
+    LHDeviceAddress_t src_id(ppkt->Header.Src);
     uint8_t base_hops = ppkt->BaseHops;
     PayloadRadarGNSSTelemetry_t &payload = ppkt->Payload;
     // scale and fix radar telemetry.
@@ -753,7 +753,7 @@ void OnHHRadarGNSSTelemetry(PacketRadarGNSSTelemetry_t *ppkt){
     float local_rssi = radio.getRSSI();
     float local_snr = radio.getSNR();
     float local_freq_off = radio.getFrequencyError();
-    std::string node_name = GetHHNodeName(src_id);
+    std::string node_name = GetLHNodeName(src_id);
     std::string uplink_str = fmt::format("{:08X}", payload.uplink);
 
     // print to console log with labels because its convienent for debugging
@@ -848,7 +848,7 @@ void OnHHRadarGNSSTelemetry(PacketRadarGNSSTelemetry_t *ppkt){
     if (src_id != gNewNodeDID){
         // If node is outside of the RX window or it is not in sync yet, sync it.
         bool fin_sync = base_hops >= 1;
-        bool foutside_rxw = GetHHWakeElapsed() > HOLYHOP_RX_WINDOW_SEC;
+        bool foutside_rxw = GetLHWakeElapsed() > LOWHOP_RX_WINDOW_SEC;
         if ( !fin_sync || foutside_rxw ){
             TSLogs.Time() << fmt::format("Node telemetry is out of sync: {}\n", src_id);
             CmdNodeToSync(src_id);
@@ -869,7 +869,7 @@ void OnHHRadarGNSSTelemetry(PacketRadarGNSSTelemetry_t *ppkt){
 }
 */
 
-void OnHHNewNode( const HHDeviceAddress_t &dev_id ){
+void OnLHNewNode( const LHDeviceAddress_t &dev_id ){
     TSLogs.Time() << fmt::format("New node: {}\n", dev_id);
     // sync & ask node for its version, name
     CmdNodeToSync(dev_id);
@@ -888,14 +888,14 @@ void SendBufferedLoRaPacket(){
     TSLogs.Time() << fmt::format("TX LoRa packet Src {}, Dest {}, RelayBy {}, RelayTo {}\n",
             src_addr, dest_addr, relayby_addr, relayto_addr );
     TSLogs << fmt::format("Packet Type: ({}) {}, {} hops, size {}, time on air {}ms\n",
-            ppkt_hdr->PktType, GetHHPktTypeName(ppkt_hdr->PktType), ppkt_hdr->HopCount,
+            (uint8_t)ppkt_hdr->PktType, GetLHPktTypeName(ppkt_hdr->PktType), ppkt_hdr->HopCount,
             gLoRaSendBufLen, radio.getTimeOnAir(gLoRaSendBufLen)/1000);
 
     // set interval command packets are timing sensitive...
     if ( ppkt_hdr->PktType == PacketType_t::CMD_SET_INTERVAL ){
         // rebuild the packet now with latest times
         PacketCommandSetInterval_t *ppkt_si = reinterpret_cast<PacketCommandSetInterval_t *>(gLoRaSendBuf);
-        HHDeviceAddress_t dest_id(ppkt_hdr->Dest);
+        LHDeviceAddress_t dest_id(ppkt_hdr->Dest);
         UpdateCmdSendIntervalPkt( *ppkt_si, dest_id );
 
         TSLogs.Time() << fmt::format(
@@ -910,7 +910,7 @@ void SendBufferedLoRaPacket(){
     }
 }
 
-void SendLoRaPacket(std::array<uint8_t,LORA_MAX_PKT_SIZE> &pkt_array, size_t pkt_size, const HHDeviceAddress_t &dst_id) {
+void SendLoRaPacket(std::array<uint8_t,LORA_MAX_PKT_SIZE> &pkt_array, size_t pkt_size, const LHDeviceAddress_t &dst_id) {
     // stop RX reply wait timer in case it was running
     gLoRaWaitReply.stop();
 
@@ -927,17 +927,17 @@ void SendLoRaPacket(std::array<uint8_t,LORA_MAX_PKT_SIZE> &pkt_array, size_t pkt
     ppkt_hdr->HopCount = 1;        // this is it's first hop
 
     // check our nodeinfo data to see if we need relay to this Destination.
-    HHDeviceAddress_t relay_to;
-    if ( GetHHNextHopFor( dst_id.ToDID(), relay_to ) )
+    LHDeviceAddress_t relay_to;
+    if ( GetLHNextHopFor( dst_id.ToDID(), relay_to ) )
         ppkt_hdr->RelayTo = relay_to.ToDID();
     else
         ppkt_hdr->RelayTo = dst_id.ToDID(); // we don't know how to reach. try direct.
 
-    // HHDeviceAddress_t dsta_id(pkt.Header.Dest);
-    // HHDeviceAddress_t srca_id(pkt.Header.Src);
+    // LHDeviceAddress_t dsta_id(pkt.Header.Dest);
+    // LHDeviceAddress_t srca_id(pkt.Header.Src);
     // TSLogs.Time() << "Send LoRa packet to 0x" << (const char *)dsta_id << " from us 0x"
     //     << (const char *)srca_id << " type (" << (uint)pkt.Header.PktType << ")"
-    //     << GetHHPktTypeName(pkt.Header.PktType) << " size " << pkt_size << "\n";
+    //     << GetLHPktTypeName(pkt.Header.PktType) << " size " << pkt_size << "\n";
 
     // if ( !relay_to.IsNull() )
     //     TSLogs.Fmt("Relay To 0x%s\n", relay_to.c_str());
@@ -964,22 +964,22 @@ void EXITHandler(){
 }
 
 void InitLoRa(){
-    // setup holyhop
-    HHEvents_t hh_events = {};
-    hh_events.OnReplyVersion            = OnHHReplyVersion;
-    hh_events.OnReplySuccess            = OnHHReplySuccess;
-    hh_events.OnReplyFailure            = OnHHReplyFailure;
-    hh_events.OnReplyName               = OnHHReplyName;
-    hh_events.OnReplyPreferredUplink    = OnHHReplyPreferredUplink;
-    hh_events.OnReplyInterval           = OnHHReplyInterval;
-    hh_events.OnReplyRadarConfig        = OnHHReplyRadarConfig;
-    hh_events.OnReplyDFUUpload          = OnHHReplyDFUUpload;
-    hh_events.OnReplyVerifyDFUUpload    = OnHHReplyVerifyDFUUpload;
-    hh_events.OnRadarTelemetry          = OnHHRadarTelemetry;
-    hh_events.OnNewNode                 = OnHHNewNode;
-    hh_events.OnReplyCmd                = OnHHReplyCmd;
-    hh_events.OnReplyTimeout            = OnHHReplyTimeout;
-    InitHH( true, gLocalDID, hh_events );
+    // setup lowhop
+    LHEvents_t lh_events = {};
+    lh_events.OnReplyVersion            = OnLHReplyVersion;
+    lh_events.OnReplySuccess            = OnLHReplySuccess;
+    lh_events.OnReplyFailure            = OnLHReplyFailure;
+    lh_events.OnReplyName               = OnLHReplyName;
+    lh_events.OnReplyPreferredUplink    = OnLHReplyPreferredUplink;
+    lh_events.OnReplyInterval           = OnLHReplyInterval;
+    lh_events.OnReplyRadarConfig        = OnLHReplyRadarConfig;
+    lh_events.OnReplyDFUUpload          = OnLHReplyDFUUpload;
+    lh_events.OnReplyVerifyDFUUpload    = OnLHReplyVerifyDFUUpload;
+    lh_events.OnRadarTelemetry          = OnLHRadarTelemetry;
+    lh_events.OnNewNode                 = OnLHNewNode;
+    lh_events.OnReplyCmd                = OnLHReplyCmd;
+    lh_events.OnReplyTimeout            = OnLHReplyTimeout;
+    InitLH( true, gLocalDID, lh_events );
 
     // load state from disk
     TSLogs.Time() << "Loading saved network state from disk\n";
@@ -1027,7 +1027,7 @@ void InitLoRa(){
 }
 
 int32_t GetSecPastRXWindow(){
-    int32_t after_sec = (int32_t)GetHHWakeElapsed() - HOLYHOP_RX_WINDOW_SEC;
+    int32_t after_sec = (int32_t)GetLHWakeElapsed() - LOWHOP_RX_WINDOW_SEC;
     return after_sec;
 
     //todo or if we are about to RX/TX outside the RX Window, dont post cloud data
@@ -1038,7 +1038,7 @@ void ProcessLoRa(){
     // print some debugging info
     //
     static bool fshow_interval = false;
-    if ( !fshow_interval && GetHHWakeElapsed() <= HOLYHOP_RX_WINDOW_SEC ){
+    if ( !fshow_interval && GetLHWakeElapsed() <= LOWHOP_RX_WINDOW_SEC ){
         fshow_interval = true;
         TSLogs.Time() << "******Sensor RX window OPEN******\n";
         // save network state to disk
@@ -1048,11 +1048,11 @@ void ProcessLoRa(){
         }
     }
     static bool fshow_tlmwait = false;
-    if ( fshow_interval && !fshow_tlmwait && GetHHWakeElapsed() > HOLYHOP_TX_EXTRA_WAIT_SEC ){
+    if ( fshow_interval && !fshow_tlmwait && GetLHWakeElapsed() > LOWHOP_TX_EXTRA_WAIT_SEC ){
         fshow_tlmwait = true;
         TSLogs.Time() << "******Base TLM wait ended******\n";
     }
-    if ( fshow_interval && GetHHWakeElapsed() > HOLYHOP_RX_WINDOW_SEC ){
+    if ( fshow_interval && GetLHWakeElapsed() > LOWHOP_RX_WINDOW_SEC ){
         fshow_interval = false;
         fshow_tlmwait = false;
         TSLogs.Time() << "******Sensor RX window CLOSED******\n";
@@ -1065,20 +1065,20 @@ void ProcessLoRa(){
     // get latest node meta data
     if ( gfGetNodesMeta ){
         std::lock_guard lockit(gSharedDataMutex);
-        gHHNodesMeta.clear();
-        const std::vector<HHNodeInfo_t> &nodes = GetHHNodes();
+        gLHNodesMeta.clear();
+        const std::vector<LHNodeInfo_t> &nodes = GetLHNodes();
         for(const auto node : nodes){
-            std::string nname = GetHHNodeName(node.dev_id); // use name from here (includes <unknown>)
-            std::string hhver = node.protocol_ver == 0 ? "unknown" : fmt::format("{:04X}", node.protocol_ver);
+            std::string nname = GetLHNodeName(node.dev_id); // use name from here (includes <unknown>)
+            std::string lhver = node.protocol_ver == 0 ? "unknown" : fmt::format("{:04X}", node.protocol_ver);
             std::string fwver = node.firmware_ver == 0 ? "unknown" : fmt::format("{:04X}", node.firmware_ver);
             std::string blver = node.bootloader_ver == 0 ? "unknown" : fmt::format("{:08X}", node.bootloader_ver);
             std::string prf_uplink = node.preferred_uplink_id.IsNull() ? "" : node.preferred_uplink_id;
             RadarConfiguration_t rcfg;
             PayloadRadarCfgToRadarCfg( node.radar_cfg,rcfg );
 
-            HHNodeMeta_t node_meta = {
+            LHNodeMeta_t node_meta = {
                 node.dev_id.c_str(),
-                hhver,
+                lhver,
                 fwver,
                 blver,
                 nname,
@@ -1092,15 +1092,15 @@ void ProcessLoRa(){
             };
 
             for(const auto qcmd : node.cmd_queue){
-                HHNodeMeta_t::HHNodeCmdMeta_t ncmd = {
-                    GetHHPktTypeName(qcmd.pkt_type),
-                    //GetHHPktReplyStatusName(qcmd.reply),
+                LHNodeMeta_t::LHNodeCmdMeta_t ncmd = {
+                    GetLHPktTypeName(qcmd.pkt_type),
+                    //GetLHPktReplyStatusName(qcmd.reply),
                     //std::string()
                 };
                 node_meta.cmdq.push_back(ncmd);
             }
 
-            gHHNodesMeta.push_back(node_meta);
+            gLHNodesMeta.push_back(node_meta);
         }
         // signal done
         gfGetNodesMeta = false;
@@ -1110,7 +1110,7 @@ void ProcessLoRa(){
     // if flagged recalculate all telemetry offsets
     if ( gfReorderTlmOffsets ){
         std::lock_guard lockit(gSharedDataMutex);
-        ReorderHHNodeTlmOffsets();
+        ReorderLHNodeTlmOffsets();
         // signal done
         gfReorderTlmOffsets = false;
         gSharedDataCV.notify_one();
@@ -1120,7 +1120,7 @@ void ProcessLoRa(){
     if ( gfRestartWakeInterval ){
         TSLogs.Time() << "DEBUG Restarting Wake Interval Timer\n";
         std::lock_guard lockit(gSharedDataMutex);
-        SetHHWakeNext( 10, GetHHWakeInterval() ); // in 10 seconds
+        SetLHWakeNext( 10, GetLHWakeInterval() ); // in 10 seconds
         // signal done
         gfRestartWakeInterval = false;
         gSharedDataCV.notify_one();
@@ -1129,9 +1129,9 @@ void ProcessLoRa(){
     // if flagged manually add a node
     if ( gfManuallyAddNode ){
         std::lock_guard lockit(gSharedDataMutex);
-        HHNodeInfo_t node = InitHHNodeInfo();
+        LHNodeInfo_t node = InitLHNodeInfo();
         node.dev_id = gManuallyAddNodeID;
-        AddHHNode( node );
+        AddLHNode( node );
         // signal done
         gfManuallyAddNode = false;
         gSharedDataCV.notify_one();
@@ -1144,9 +1144,9 @@ void ProcessLoRa(){
     // todo.
 
     // resync all nodes
-    if ( GetHHFlagResyncAll() ){
-        ClearHHFlagResyncAll();
-        const std::vector<HHNodeInfo_t> &nodes = GetHHNodes();
+    if ( GetLHFlagResyncAll() ){
+        ClearLHFlagResyncAll();
+        const std::vector<LHNodeInfo_t> &nodes = GetLHNodes();
         for(const auto node : nodes){
             // if it doesn't already have a sync command queued.
             if ( node.cmd_queue.size() &&
@@ -1165,11 +1165,11 @@ void ProcessLoRa(){
     // 'ping' sensor nodes periodically so they know they are still in sync
     // (It resets their 'forget' timer when they hear from us)
     //
-    if ( gLoRaPingNodes.elapsed_sec() >= HOLYHOP_PING_NODES_SEC ){
+    if ( gLoRaPingNodes.elapsed_sec() >= LOWHOP_PING_NODES_SEC ){
         gLoRaPingNodes.restart();
         TSLogs.Time() << "### Time to ping nodes.\n";
         // use a get version packet. (any pkt type from us would work.)
-        const std::vector<HHNodeInfo_t> &nodes = GetHHNodes();
+        const std::vector<LHNodeInfo_t> &nodes = GetLHNodes();
         for(const auto node : nodes){
             QueryNodeInfo( node.dev_id );
         }
@@ -1178,9 +1178,9 @@ void ProcessLoRa(){
     ////////////////////////////////////////////
     // process threadsafe outgoing command queue
     //
-    HHQueuedCommand_t qcmd;
-    while( gHHCmdQueue.try_pop(qcmd) ){
-        //TSLogs.Time() << fmt::format("gHHCmdQueue pop for {}\n",qcmd.dest_id);
+    LHQueuedCommand_t qcmd;
+    while( gLHCmdQueue.try_pop(qcmd) ){
+        //TSLogs.Time() << fmt::format("gLHCmdQueue pop for {}\n",qcmd.dest_id);
         // For some cmd types, get rid of queued old duplicate commands. only keep the newest.
         bool fremove_dupes;
         switch( qcmd.pkt_type ){
@@ -1207,7 +1207,7 @@ void ProcessLoRa(){
             BuildDFUUploadCmd( qcmd );
         }
 
-        QueueHHNodeCmd(qcmd,fremove_dupes);
+        QueueLHNodeCmd(qcmd,fremove_dupes);
 /*
         if ( qcmd.fsend_now == true ){
             // Intented for CmdSetInterval which is timing sensitive, or debugging.
@@ -1225,15 +1225,15 @@ void ProcessLoRa(){
     //
     // Are we close to, or inside, the RX Window? For long running command sequences
     // ..like firmware update we don't want to clobber the RX Window.
-    bool fclear_of_rxw = (GetHHWakeNextMS()/1000 > HOLYHOP_PRE_RX_WINDOW_SEC) &&
-                     (GetHHWakeElapsed() > HOLYHOP_TX_EXTRA_WAIT_SEC);
+    bool fclear_of_rxw = (GetLHWakeNextMS()/1000 > LOWHOP_PRE_RX_WINDOW_SEC) &&
+                     (GetLHWakeElapsed() > LOWHOP_TX_EXTRA_WAIT_SEC);
 
     // IF we aren't already sending, AND we aren't waiting for a cmd reply, AND the node
     // ..has time to respond, then send next queued command.
     if ( gLoRaSendBufLen == 0 && !gLoRaWaitReply.isRunning() && fclear_of_rxw){
         // process node command queues. find a command that needs to be sent now
-        HHQueuedCommand_t acmd;
-        if ( NextHHQCmd(acmd) ){
+        LHQueuedCommand_t acmd;
+        if ( NextLHQCmd(acmd) ){
             // send command packet
             SendLoRaPacket(acmd.cmd_pkt_buf, acmd.pkt_size, acmd.dest_id);
         }
@@ -1242,14 +1242,14 @@ void ProcessLoRa(){
     ////////////////////////////////////
     // do RX Reply wait timer and retry count.
     //
-    if ( gLoRaWaitReply.elapsed_ms() >= HOLYHOP_REPLY_TIMEOUT ){
+    if ( gLoRaWaitReply.elapsed_ms() >= LOWHOP_REPLY_TIMEOUT ){
         gLoRaWaitReply.stop();
         TSLogs.Time() << "RX Reply Wait timed out.\n";
     }
 
     //////////////////////
     // process expired cmds
-    RemoveHHQOldCmds();
+    RemoveLHQOldCmds();
 
     ///////////////////////////////
     // check for a LoRa radio event
@@ -1292,24 +1292,24 @@ void ProcessLoRa(){
             // }
             // ("\n");
 
-            // check for valid HH header
+            // check for valid LH header
             if (pkt_size < sizeof(PacketHeader_t)){
-                TSLogs.Time() << "RX invalid HHPacket header! ignored.\n";
+                TSLogs.Time() << "RX invalid LHPacket header! ignored.\n";
             }
             else{
-                // valid HH Packet. Process it.
+                // valid LH Packet. Process it.
                 PacketHeader_t *ppkt_hdr = reinterpret_cast<PacketHeader_t *>(rx_buf);
                 PacketDeviceIDStrHelper src_id_str(ppkt_hdr->Src);
                 PacketDeviceIDStrHelper dest_id_str(ppkt_hdr->Dest);
                 PacketDeviceIDStrHelper relayby_id_str(ppkt_hdr->RelayBy);
                 PacketDeviceIDStrHelper relayto_id_str(ppkt_hdr->RelayTo);
-                TSLogs.Time() << fmt::format("$$$$ HH packet from {} hops {} type: ({}) {}\n",
-                    src_id_str, ppkt_hdr->HopCount, ppkt_hdr->PktType, GetHHPktTypeName(ppkt_hdr->PktType));
+                TSLogs.Time() << fmt::format("$$$$ LH packet from {} hops {} type: ({}) {}\n",
+                    src_id_str, ppkt_hdr->HopCount, (uint8_t)ppkt_hdr->PktType, GetLHPktTypeName(ppkt_hdr->PktType));
                 TSLogs.Time() << fmt::format("$$$$ relayby {}, relayto {}, src {}, dest {}\n",
                                              relayby_id_str, relayto_id_str, src_id_str, dest_id_str );
 
-                if (!ProcessHHPkt(ppkt_hdr, pkt_size, rssi, snr)) {
-                    TSLogs.Time() << "ProcessHHPkt failed.\n";
+                if (!ProcessLHPkt(ppkt_hdr, pkt_size, rssi, snr)) {
+                    TSLogs.Time() << "ProcessLHPkt failed.\n";
                 }
             }
         }
@@ -1392,22 +1392,22 @@ std::string GetTelemetryColumns(){
 }
 
 void GetWakeInterval( std::time_t &next_wake, uint32_t &wake_sec ){
-    next_wake = GetHHWakeTime();
-    wake_sec = GetHHWakeInterval();
+    next_wake = GetLHWakeTime();
+    wake_sec = GetLHWakeInterval();
 }
 
-const std::vector<HHNodeMeta_t> & GetHHNodesMetadata(){
+const std::vector<LHNodeMeta_t> & GetLHNodesMetadata(){
     // signal main thread
     gfGetNodesMeta = true;
     std::unique_lock lockit(gSharedDataMutex);
     gSharedDataCV.wait(lockit,[]{ return gfGetNodesMeta==false; });
-    return gHHNodesMeta;
+    return gLHNodesMeta;
 }
 
 bool GetLastRadarConfig( uint32_t dev_id_dword, RadarConfiguration_t &rcfg ){
-    HHDeviceAddress_t dev_id(dev_id_dword);
-    GetHHNodesMetadata(); // refresh metadata
-    for ( auto nodemeta : gHHNodesMeta ){
+    LHDeviceAddress_t dev_id(dev_id_dword);
+    GetLHNodesMetadata(); // refresh metadata
+    for ( auto nodemeta : gLHNodesMeta ){
         if ( nodemeta.dev_id == std::string(dev_id) ){
             rcfg = nodemeta.rad_cfg;
             return true;
@@ -1586,7 +1586,7 @@ bool GetSensorLogFile( uint32_t dest_id_dword, std::filesystem::path &slog_filep
 }
 
 template<class TPacket>
-void QueueHHCmd(TPacket &pkt, const HHDeviceAddress_t &dst_id, bool fsend_now, std::filesystem::path fw_path) {
+void QueueLHCmd(TPacket &pkt, const LHDeviceAddress_t &dst_id, bool fsend_now, std::filesystem::path fw_path) {
     static_assert(sizeof(pkt) <= LORA_MAX_PKT_SIZE);
 
     size_t pkt_size = sizeof(pkt);
@@ -1594,10 +1594,10 @@ void QueueHHCmd(TPacket &pkt, const HHDeviceAddress_t &dst_id, bool fsend_now, s
     //moved to cmdpkt ctor: pkt.ref_id = rand() % 256;   // setting cmd ref_id. just a random # to match on.
 
     TSLogs.Time() << fmt::format("Queue LoRa packet to {} type ({}) {} size {}\n",
-           dst_id, pkt.Header.PktType, GetHHPktTypeName(pkt.Header.PktType), pkt_size);
+           dst_id, (uint8_t)pkt.Header.PktType, GetLHPktTypeName(pkt.Header.PktType), pkt_size);
 
     // queue it
-    HHQueuedCommand_t qitem = {};
+    LHQueuedCommand_t qitem = {};
     qitem.fsend_now = fsend_now;
     qitem.dest_id = dst_id;
     qitem.pkt_type = pkt.Header.PktType;
@@ -1608,17 +1608,17 @@ void QueueHHCmd(TPacket &pkt, const HHDeviceAddress_t &dst_id, bool fsend_now, s
     uint8_t *psrc = reinterpret_cast<uint8_t *>(&pkt);
     std::copy(psrc, psrc + pkt_size, qitem.cmd_pkt_buf.begin()); // copy pkt bytes
 
-    gHHCmdQueue.push(qitem);
+    gLHCmdQueue.push(qitem);
 }
 
 // overload that defaults to NOT fsend_now
 template<class TPacket>
-void QueueHHCmd(TPacket &pkt, const HHDeviceAddress_t &dst_id){
-    QueueHHCmd(pkt, dst_id, false, {});
+void QueueLHCmd(TPacket &pkt, const LHDeviceAddress_t &dst_id){
+    QueueLHCmd(pkt, dst_id, false, {});
 }
 
 void QueueCmdRadarConfig( uint32_t dest_id_dword, RadarConfiguration_t &rcfg ){
-    HHDeviceAddress_t dest_id(dest_id_dword);
+    LHDeviceAddress_t dest_id(dest_id_dword);
     PacketCommandConfigRadar_t pkt;
     pkt.Payload.start_dist_mm           = rcfg.start_dist_mm;
     pkt.Payload.end_dist_mm             = rcfg.end_dist_mm;
@@ -1632,61 +1632,61 @@ void QueueCmdRadarConfig( uint32_t dest_id_dword, RadarConfiguration_t &rcfg ){
     pkt.Payload.max_step_count          = rcfg.max_step_count;
     pkt.Payload.reflector_shape         = rcfg.reflector_shape;
     pkt.Payload.close_range_leakage     = rcfg.close_range_leakage;
-    QueueHHCmd(pkt, dest_id);
+    QueueLHCmd(pkt, dest_id);
 }
 
 void QueueCmdGetRadarConfig( uint32_t dest_id_dword ){
-    HHDeviceAddress_t dest_id(dest_id_dword);
+    LHDeviceAddress_t dest_id(dest_id_dword);
     PacketCommandGetRadarConfig_t pkt;
-    QueueHHCmd(pkt, dest_id);
+    QueueLHCmd(pkt, dest_id);
 }
 
 void QueueCmdGetSensorInfo( uint32_t dest_id_dword ){
-    HHDeviceAddress_t dest_id(dest_id_dword);
+    LHDeviceAddress_t dest_id(dest_id_dword);
     QueryNodeInfo(dest_id);
 }
 
 void QueueCmdSetInterval( uint32_t tlm_interval_sec ){
     TSLogs.Time() << "######## setting wake interval to " << tlm_interval_sec << " seconds\n";
-    SetHHWakeInterval( tlm_interval_sec );
+    SetLHWakeInterval( tlm_interval_sec );
     // signal main thread to resend all tlm offsets with new interval
     gfReorderTlmOffsets = true;
 }
 
 void QueueCmdSetSensorName( uint32_t dest_id_dword, std::string new_name ){
-    HHDeviceAddress_t dest_id(dest_id_dword);
+    LHDeviceAddress_t dest_id(dest_id_dword);
     PacketCommandSetName_t pkt;
-    new_name = new_name.substr( 0, HOLYHOP_NAME_SIZE-1 ); // length limited to HOLYHOP_NAME_SIZE-1
+    new_name = new_name.substr( 0, LOWHOP_NAME_SIZE-1 ); // length limited to LOWHOP_NAME_SIZE-1
     pkt.Payload.name.Set( new_name.c_str(), new_name.length() );
-    QueueHHCmd(pkt, dest_id);
+    QueueLHCmd(pkt, dest_id);
 }
 
 void QueueCmdSetPreferredUplink( uint32_t dest_id_dword, uint32_t uplink_id_dword ){
-    HHDeviceAddress_t dest_id(dest_id_dword);
-    HHDeviceAddress_t uplink_id(uplink_id_dword);
+    LHDeviceAddress_t dest_id(dest_id_dword);
+    LHDeviceAddress_t uplink_id(uplink_id_dword);
     PacketCommandSetPreferredUplink_t pkt;
     pkt.Payload.uplink = uplink_id.ToDID();
-    QueueHHCmd(pkt, dest_id);
+    QueueLHCmd(pkt, dest_id);
 }
 
 void QueueCmdResetSensor( uint32_t dest_id_dword ){
-    HHDeviceAddress_t dest_id(dest_id_dword);
+    LHDeviceAddress_t dest_id(dest_id_dword);
     PacketCommandReset_t pkt;
-    QueueHHCmd(pkt, dest_id);
+    QueueLHCmd(pkt, dest_id);
 }
 
 // for debugging purposes, queue a command to immediately send a get version pkt.
 // ..without waiting for wake time.
 void QueueCmdSendPktNow( uint32_t dest_id_dword ){
-    HHDeviceAddress_t dest_id(dest_id_dword);
+    LHDeviceAddress_t dest_id(dest_id_dword);
     PacketCommandGetVersion_t pkt;
-    QueueHHCmd(pkt, dest_id, true, {});
+    QueueLHCmd(pkt, dest_id, true, {});
 }
 
 void QueueCmdBlinkLED( uint32_t dest_id_dword ){
-    HHDeviceAddress_t dest_id(dest_id_dword);
+    LHDeviceAddress_t dest_id(dest_id_dword);
     PacketCommandBlinkLED_t pkt;
-    QueueHHCmd(pkt, dest_id);
+    QueueLHCmd(pkt, dest_id);
 }
 
 // @brief apparently this algorithm is known as a CRC-16 CCITT FALSE
@@ -1705,7 +1705,7 @@ static uint16_t crc16_checksum(const uint8_t *data_p, uint32_t length) {
 // @brief start firmware update process on a sensor
 // @returns true on success
 bool UpdateSensorFW( uint32_t dest_id_dword, const std::filesystem::path &fw_path ){
-    HHDeviceAddress_t dest_id(dest_id_dword);
+    LHDeviceAddress_t dest_id(dest_id_dword);
 
     // read firmware bin
     std::ifstream fw_file(fw_path, std::ios::binary);
@@ -1732,7 +1732,7 @@ bool UpdateSensorFW( uint32_t dest_id_dword, const std::filesystem::path &fw_pat
     PacketCommandBeginDFUUpload_t pkt;
     pkt.Payload.dfu_crc = crc16;
     pkt.Payload.dfu_size = fw_size;
-    QueueHHCmd(pkt, dest_id, false, fw_path);
+    QueueLHCmd(pkt, dest_id, false, fw_path);
 
     return true;
 }
@@ -1740,11 +1740,11 @@ bool UpdateSensorFW( uint32_t dest_id_dword, const std::filesystem::path &fw_pat
 // @brief resume stalled firmware update process on a sensor
 // @returns true on success
 bool ResumeSensorFW( uint32_t dest_id_dword ){
-    HHDeviceAddress_t dest_id(dest_id_dword);
+    LHDeviceAddress_t dest_id(dest_id_dword);
     PacketCommandDFUUpload_t pkt_dfu; // pkt will be built in queue handler
     bool fsend_now=false;   // send now false: queue cmd. once the cmd reply is received we do
                             // ..send now true to continously stream the fw chunks
-    QueueHHCmd(pkt_dfu, dest_id, fsend_now, {});
+    QueueLHCmd(pkt_dfu, dest_id, fsend_now, {});
     return true;
 }
 
@@ -1764,6 +1764,6 @@ void RestartWakeInterval(){
     gfRestartWakeInterval = true;
 }
 
-uint16_t GetHHVersion(){
-    return HOLYHOP_VERSION;
+uint16_t GetLHVersion(){
+    return LOWHOP_VERSION;
 }

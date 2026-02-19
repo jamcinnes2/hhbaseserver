@@ -24,9 +24,9 @@
 #include <filesystem>
 #include "radarsensor.h"
 
-static const char * BASE_FIRMWARE_VERSION_STR = "0.93";
+static const char * BASE_FIRMWARE_VERSION_STR = "0.95";
 
-struct HHNodeMeta_t{    // node metadata for web service consumption
+struct LHNodeMeta_t{    // node metadata for web service consumption
     std::string dev_id;
     std::string protocol_ver;
     std::string firmware_ver;
@@ -40,12 +40,12 @@ struct HHNodeMeta_t{    // node metadata for web service consumption
     uint32_t fw_offset;
     std::string preferred_uplink_id;
 
-    struct HHNodeCmdMeta_t{
+    struct LHNodeCmdMeta_t{
         std::string cmd_type;
         //std::string reply_status;
         //std::string reply_data;
     };
-    std::vector<HHNodeCmdMeta_t> cmdq;
+    std::vector<LHNodeCmdMeta_t> cmdq;
 };
 
 void InitLoRa();
@@ -58,7 +58,7 @@ std::string RadarCfgToStr( const RadarConfiguration_t &rcfg );
 // THREADSAFE
 void GetWakeInterval( std::time_t &next_wake, uint32_t &wake_sec );
 std::string GetTelemetryColumns();
-const std::vector<HHNodeMeta_t> & GetHHNodesMetadata();
+const std::vector<LHNodeMeta_t> & GetLHNodesMetadata();
 bool GetLastRadarConfig( uint32_t dev_id_dword, RadarConfiguration_t &rcfg );
 std::string GetServerLog( size_t num_lines );
 void RecalcTelemetryOffsets();
@@ -76,4 +76,4 @@ bool UpdateSensorFW( uint32_t dest_id_dword, const std::filesystem::path &fw_pat
 bool ResumeSensorFW( uint32_t dest_id_dword );
 bool ManuallyAddNode( uint32_t dev_id_dword );
 void RestartWakeInterval();
-uint16_t GetHHVersion();
+uint16_t GetLHVersion();
